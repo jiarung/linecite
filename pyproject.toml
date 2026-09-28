@@ -1,0 +1,24 @@
+[build-system]
+requires = ["setuptools>=77"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "linecite"
+version = "0.1.0.dev0"
+description = "Verbatim, line-cited memory for AI agents - zero services, no API key required"
+readme = "README.md"
+license = "Apache-2.0"
+requires-python = ">=3.9"
+dependencies = ["duckdb>=0.10"]
+
+[project.optional-dependencies]
+embeddings = ["openai>=1.0"]
+dev = ["pytest>=7", "jsonschema>=4"]
+
+[project.scripts]
+linecite-ingest = "linecite.generic_ingester:main"
+linecite-score = "linecite.score:main"
+linecite-conformance = "linecite.conformance:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]

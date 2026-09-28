@@ -1,0 +1,12 @@
+{"query_id": "g01", "query": "install linecite pip", "expected": ["docs/quickstart.md"], "query_class": "doc_lookup"}
+{"query_id": "g02", "query": "ingest a directory of markdown files", "expected": ["docs/quickstart.md"], "query_class": "doc_lookup"}
+{"query_id": "g03", "query": "query without an API key", "expected": ["docs/quickstart.md"], "query_class": "doc_lookup"}
+{"query_id": "g04", "query": "what happens when I re-run ingest on unchanged files", "expected": ["docs/quickstart.md"], "query_class": "behavior"}
+{"query_id": "g05", "query": "citation contract raw_text exact slice", "expected": ["docs/citations.md"], "query_class": "doc_lookup"}
+{"query_id": "g06", "query": "why can a citation become stale", "expected": ["docs/citations.md"], "query_class": "behavior"}
+{"query_id": "g07", "query": "content_drift source_missing reasons", "expected": ["docs/citations.md"], "query_class": "behavior"}
+{"query_id": "g08", "query": "invalid line range rejected at write", "expected": ["docs/citations.md"], "query_class": "behavior"}
+{"query_id": "g09", "query": "goldset jsonl format query_class", "expected": ["docs/scoring.md"], "query_class": "doc_lookup"}
+{"query_id": "g10", "query": "bootstrap confidence interval metrics", "expected": ["docs/scoring.md"], "query_class": "doc_lookup"}
+{"query_id": "g11", "query": "hit rate MRR nDCG per query class", "expected": ["docs/scoring.md"], "query_class": "doc_lookup"}
+{"query_id": "g12", "query": "verbatim line cited memory for agents", "expected": ["README.md"], "query_class": "doc_lookup"}

@@ -1,0 +1,40 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://linecite.dev/contract/manifest.v0.schema.json",
+  "title": "linecite snapshot manifest v0 (UNSTABLE)",
+  "description": "Written from docs/design/snapshot-contract.md §2.2/§3 (not from code). Unknown additional keys are semantically ignored but ARE covered by manifest_digest.",
+  "type": "object",
+  "required": [
+    "format_version", "host", "host_identity_fingerprint", "origin_repo",
+    "content_digest", "snapshot_seq", "manifest_digest", "chunk_count",
+    "exported_at", "excluded_count", "empty", "meta"
+  ],
+  "properties": {
+    "format_version": {"type": "integer", "minimum": 0, "maximum": 0},
+    "host": {"type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$"},
+    "host_identity_fingerprint": {"type": "string", "pattern": "^[0-9a-f]{32}$"},
+    "origin_repo": {"type": "string", "minLength": 1},
+    "content_digest": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "snapshot_seq": {"type": "integer", "minimum": 0},
+    "manifest_digest": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "chunk_count": {"type": "integer", "minimum": 0},
+    "exported_at": {
+      "type": "string",
+      "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}Z$",
+      "description": "NOT fully schema-enforceable: importers MUST additionally verify this is a real RFC3339 UTC instant (the pattern alone admits impossible dates such as 2026-99-99T99:99:99Z); no fractional seconds"
+    },
+    "excluded_count": {"type": "integer", "minimum": 0},
+    "empty": {"type": "boolean"},
+    "meta": {
+      "type": "object",
+      "required": ["repo_url", "repo_sha", "ingest_globs", "ingested_at"],
+      "properties": {
+        "repo_url": {"type": ["string", "null"]},
+        "repo_sha": {"type": ["string", "null"]},
+        "ingest_globs": {
+          "type": ["array", "null"], "items": {"type": "string"}},
+        "ingested_at": {"type": ["string", "null"]}
+      }
+    }
+  }
+}

@@ -1,0 +1,16 @@
+{"query_id": "m01", "query": "cross compile", "expected": ["lx64:README.md"], "query_class": "scoped_distractor", "scope": ["lx64"]}
+{"query_id": "m02", "query": "static linking", "expected": ["lx64:build.md"], "query_class": "scoped_distractor", "scope": ["lx64"]}
+{"query_id": "m03", "query": "artifact upload", "expected": ["lx64:deploy.md"], "query_class": "scoped_distractor", "scope": ["lx64"]}
+{"query_id": "m04", "query": "glibc release flags", "expected": ["lx64:build.md"], "query_class": "doc_lookup", "scope": ["lx64"]}
+{"query_id": "m05", "query": "gcc glibc", "expected": ["lx64:build.md"], "query_class": "doc_lookup", "scope": ["lx64"]}
+{"query_id": "m06", "query": "linux fleet upload", "expected": ["lx64:deploy.md"], "query_class": "doc_lookup", "scope": ["lx64"]}
+{"query_id": "m07", "query": "target triple selection", "expected": ["lx64:README.md"], "query_class": "doc_lookup", "scope": ["lx64"]}
+{"query_id": "m08", "query": "mingw", "expected": ["wn64:build.md"], "query_class": "doc_lookup", "scope": ["wn64"]}
+{"query_id": "m09", "query": "upload retries windows", "expected": ["wn64:deploy.md"], "query_class": "doc_lookup", "scope": ["wn64"]}
+{"query_id": "m10", "query": "windows runner notes", "expected": ["wn64:README.md"], "query_class": "doc_lookup", "scope": ["wn64"]}
+{"query_id": "m11", "query": "version tagging changelog", "expected": ["dochub:release.md"], "query_class": "doc_lookup", "scope": ["dochub"]}
+{"query_id": "m12", "query": "pager rotation schedule", "expected": ["dochub:oncall.md"], "query_class": "doc_lookup", "scope": ["dochub"]}
+{"query_id": "m13", "query": "python naming conventions", "expected": ["dochub:style.md"], "query_class": "doc_lookup", "scope": ["dochub"]}
+{"query_id": "m14", "query": "release policy tagging", "expected": ["dochub:release.md"], "query_class": "doc_lookup", "scope": ["dochub"]}
+{"query_id": "m15", "query": "platform team rotation", "expected": ["dochub:oncall.md"], "query_class": "doc_lookup", "scope": ["dochub"]}
+{"query_id": "m16", "query": "module naming style", "expected": ["dochub:style.md"], "query_class": "doc_lookup", "scope": ["dochub"]}

@@ -1,0 +1,36 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://linecite.dev/contract/chunk-row.v0.schema.json",
+  "title": "linecite snapshot chunks.jsonl row v0 (UNSTABLE)",
+  "description": "Written from docs/design/snapshot-contract.md §2.1/§4/§5 (not from code). Wire form: one canonical JSON object per line (UTF-8, code-point-sorted keys, compact separators, \\n-terminated), rows sorted by chunk_uid; EXACTLY this key set — unknown or missing keys reject. NOT schema-enforceable (importers MUST check separately, §2.1/§4/§8): per-line canonical-byte equality; end_line >= start_line; recomputation of content_sha/chunk_id/chunk_uid per the §4 formulas; file-wide chunk_uid ordering; chunk_uid and (source_path, chunk_ordinal) uniqueness; host/origin_repo equality with the manifest.",
+  "type": "object",
+  "required": [
+    "chunk_uid", "chunk_id", "host", "origin_repo", "source_path",
+    "source_type", "start_line", "end_line", "text", "raw_text",
+    "content_sha", "chunk_ordinal", "heading_path", "artifact_type",
+    "language", "quality_tag"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "chunk_uid": {"type": "string", "pattern": "^[0-9a-f]{32}$"},
+    "chunk_id": {"type": "string", "pattern": "^[0-9a-f]{16}$"},
+    "host": {"type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$"},
+    "origin_repo": {"type": "string", "minLength": 1},
+    "source_path": {
+      "type": "string", "minLength": 1,
+      "pattern": "^(?!\\.\\.?(?:/|$))[^/\\\\\u0000]+(?:/(?!\\.\\.?(?:/|$))[^/\\\\\u0000]+)*$",
+      "description": "canonical POSIX relative path: no leading/trailing '/', single-'/' separated non-empty segments, no '.'/'..' segments, no backslash or NUL; byte comparison, no unicode normalization"
+    },
+    "source_type": {"type": "string", "minLength": 1},
+    "start_line": {"type": "integer", "minimum": 1},
+    "end_line": {"type": "integer", "minimum": 1},
+    "text": {"type": "string"},
+    "raw_text": {"type": "string"},
+    "content_sha": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "chunk_ordinal": {"type": "integer", "minimum": 0},
+    "heading_path": {"type": ["string", "null"]},
+    "artifact_type": {"type": ["string", "null"]},
+    "language": {"type": ["string", "null"]},
+    "quality_tag": {"type": ["string", "null"]}
+  }
+}
