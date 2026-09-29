@@ -203,6 +203,19 @@ def main(argv: Optional[list[str]] = None) -> int:
     ap.add_argument("--host", default="local")
     ap.add_argument("--origin-repo", default=None,
                     help="default: basename of root")
+    ap.add_argument("--embed", choices=["none", "local"], default="none",
+                    help="'local' embeds with the bundled local model "
+                         "(requires the local-embeddings extra; no API "
+                         "key). Default: lexical-only ingest.")
+    ap.add_argument("--model-path", default=None,
+                    help="local path to a pre-downloaded embedding "
+                         "model (offline use; implies --embed local). "
+                         "Must hold a copy of the default model unless "
+                         "--model-id names what it actually is.")
+    ap.add_argument("--model-id", default=None,
+                    help="model identity stamped into embedding "
+                         "provenance when --model-path holds a "
+                         "non-default model")
     ap.add_argument("--dim", type=int, default=None,
                     help="embedding dimension. Default: the store's "
                          "persisted dim for an existing DB (inferred "
@@ -222,12 +235,46 @@ def main(argv: Optional[list[str]] = None) -> int:
         ap.error(f"not a directory: {root}")
     origin = args.origin_repo or root.resolve().name
     scope = args.scope or ("files" if args.glob else "full")
-    store = ChunkStore(args.db, dim=_resolve_dim(args.db, args.dim))
+    embedder = None
+    if args.model_id and not (args.embed == "local" or args.model_path):
+        ap.error("--model-id only applies with --embed local or "
+                 "--model-path (provenance flags must not silently "
+                 "no-op on a lexical ingest)")
+    if args.embed == "local" or args.model_path:
+        from linecite.local_embedder import DEFAULT_LOCAL_MODEL, LocalEmbedder
+        try:
+            embedder = LocalEmbedder(
+                model_id=args.model_id or DEFAULT_LOCAL_MODEL,
+                model_path=args.model_path)
+        except (ImportError, RuntimeError) as e:
+            ap.error(str(e))
+        if args.dim is not None:
+            ap.error(f"--dim conflicts with --embed local: the "
+                     f"dimension is taken from the model "
+                     f"(dim={embedder.dim}) — omit --dim")
+    dim = (embedder.dim if embedder is not None and args.dim is None
+           and not Path(args.db).exists()
+           else _resolve_dim(args.db, args.dim))
+    try:
+        store = ChunkStore(args.db, dim=dim)
+    except ValueError as e:
+        # Open-time dim mismatch (E0 guard) surfaces as CLI guidance,
+        # not a stack trace — reachable e.g. with --dim equal to the
+        # local model on a store built for another dimension.
+        ap.error(f"{e} (use ChunkStore.reembed to migrate, or a new "
+                 "--db)")
+    if embedder is not None and store.dim != embedder.dim:
+        store.close()
+        ap.error(f"store dim {store.dim} != local model dim "
+                 f"{embedder.dim}: this store was built for a "
+                 "different embedding space (use ChunkStore.reembed "
+                 "to migrate, or a new --db)")
     try:
         stats = ingest_paths(
             store, root, host=args.host, origin_repo=origin,
             globs=tuple(args.glob) if args.glob else DEFAULT_GLOBS,
-            source_type=args.source_type, scope=scope)
+            source_type=args.source_type, scope=scope,
+            embedder=embedder)
     except (ValueError, NotImplementedError) as e:
         ap.error(str(e))
     finally:

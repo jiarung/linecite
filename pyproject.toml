@@ -13,7 +13,13 @@ dependencies = ["duckdb>=0.10"]
 
 [project.optional-dependencies]
 embeddings = ["openai>=1.0"]
+local-embeddings = ["model2vec>=0.3"]
 dev = ["pytest>=7", "jsonschema>=4"]
+
+[tool.pytest.ini_options]
+markers = [
+    "local_embeddings: integration tests needing the local-embeddings extra and a cached model (skipped otherwise)",
+]
 
 [project.scripts]
 linecite-ingest = "linecite.generic_ingester:main"

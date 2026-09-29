@@ -17,9 +17,11 @@ exact line range of a real file, with a citation contract that is
   re-reads the live file and tells you `content_drift` /
   `source_missing` instead of letting an agent cite stale lines.
 - **No API key, no services** - the default retrieval path is DuckDB
-  full-text search (BM25) over a single local database file. Embeddings
-  (OpenAI or your own `embed_fn`) are an optional extra, and stored
-  vectors are never silently re-embedded.
+  full-text search (BM25) over a single local database file. Retrieval
+  quality is a ladder you opt into: BM25 (zero deps) → local embeddings
+  (still no key) → API embeddings → hybrid. Stored vectors are never
+  silently re-embedded, and every vector records which model produced
+  it (`embedding_model`) so model spaces never mix.
 - **Provenance-keyed upserts** - chunks carry host/repo/ordinal/sha
   identity; re-ingest reconciles (insert/update/delete) instead of
   duplicating, and a failed scan can never mass-delete.
@@ -42,6 +44,24 @@ for chunk, score in zip(res.chunks, res.scores):
     print(f"{chunk.source_path}:L{chunk.start_line}-{chunk.end_line}"
           f"  [{'fresh' if fresh else 'STALE'}]  {score:.3f}")
 ```
+
+## Semantic retrieval without an API key (optional)
+
+```bash
+pip install 'linecite[local-embeddings]'
+linecite-ingest ./my-repo --db kb.duckdb --embed local
+```
+
+`--embed local` uses a small static embedding model
+([model2vec](https://github.com/MinishLab/model2vec) potion-base-8M:
+no torch, ~30MB, millisecond CPU inference), so paraphrased queries
+match even with zero word overlap — still no API key, no runtime
+service. Honest note: the model itself is downloaded from Hugging
+Face **once** on first use and cached (same spirit as DuckDB's
+one-time extension install); fully offline machines should
+pre-download it and pass `--model-path`. OpenAI embeddings
+(`linecite[embeddings]`) remain available as the API rung of the
+ladder.
 
 ## Why line-anchored citations
 
