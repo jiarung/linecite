@@ -5,6 +5,15 @@ any release; this file is the migration record.
 
 ## Unreleased
 
+### Changed (behavior)
+- **Hybrid retrieval is now the default when an embedder is present.**
+  `Retriever.retrieve` gains `mode="auto"|"lexical"|"vector"|"hybrid"`;
+  `auto` resolves to `hybrid` (reciprocal rank fusion of the BM25 and
+  vector legs) instead of the previous pure-vector behavior. Migration:
+  pass `mode="vector"` to keep the old semantics. `RetrievalResult`
+  gains `retrieval_mode`; score semantics differ per mode and are not
+  comparable across modes.
+
 ### Added
 - `chunks.embedding_model` column: vector provenance (which model
   produced the stored embedding). New writes enforce the pairing

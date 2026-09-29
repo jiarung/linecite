@@ -126,9 +126,13 @@ class TestModelIsolation:
         assert len(hits) == 3
 
     def test_retriever_passes_embedder_model(self):
+        # mode="vector" pins the pure-vector path (E2 made hybrid the
+        # embedder default; the hybrid lexical leg is model-agnostic
+        # by design, so this isolation property is vector-leg-scoped).
         s = self._mixed_store()
         emb = FakeEmbedder(model="fake/test-b")
-        res = Retriever(s, embedder=emb).retrieve("apple", k=10)
+        res = Retriever(s, embedder=emb).retrieve("apple", k=10,
+                                                  mode="vector")
         assert {c.embedding_model for c in res.chunks} == {"fake/test-b"}
 
 

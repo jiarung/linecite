@@ -63,6 +63,20 @@ pre-download it and pass `--model-path`. OpenAI embeddings
 (`linecite[embeddings]`) remain available as the API rung of the
 ladder.
 
+With an embedder attached, `Retriever.retrieve` defaults to **hybrid**
+(BM25 + vector, reciprocal rank fusion); pass `mode="vector"` or
+`mode="lexical"` to run a single leg:
+
+```python
+r = Retriever(store, embedder=emb)
+res = r.retrieve("how do we retry", k=5)
+res.retrieval_mode   # "hybrid"
+
+# migration: pre-hybrid releases ran pure vector search when an
+# embedder was attached — keep that behavior explicitly:
+old_style = r.retrieve("how do we retry", k=5, mode="vector")
+```
+
 ## Why line-anchored citations
 
 An agent that answers from memory should be auditable in one glance:
