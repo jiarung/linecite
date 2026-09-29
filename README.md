@@ -77,6 +77,22 @@ res.retrieval_mode   # "hybrid"
 old_style = r.retrieve("how do we retry", k=5, mode="vector")
 ```
 
+Measured on the bundled **synthetic paraphrase regression fixture**
+(`evals/paraphrase-goldset.jsonl`, 20 queries; the `paraphrase` class
+is constructed with zero content-word overlap against its target and
+per-item verified, so it demonstrates the semantic leg's signal — not
+general retrieval quality; `exact_term` guards against hybrid
+regressing BM25's strengths):
+
+| line | hit@5 | paraphrase h@5 | exact h@5 |
+|---|---|---|---|
+| bm25 | 0.400 | 0.000 | 1.000 |
+| local-embed | 1.000 | 1.000 | 1.000 |
+| hybrid | 1.000 | 1.000 | 1.000 |
+
+Reproduce: `python scripts/eval_ladder.py` (needs the
+local-embeddings extra).
+
 ## Why line-anchored citations
 
 An agent that answers from memory should be auditable in one glance:

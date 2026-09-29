@@ -1,0 +1,20 @@
+{"query_id": "p01", "query": "fast car cornering grip", "expected": ["sedan.md"], "query_class": "paraphrase"}
+{"query_id": "p02", "query": "how to brew strong coffee", "expected": ["espresso.md"], "query_class": "paraphrase"}
+{"query_id": "p03", "query": "kubernetes crash loop diagnosis", "expected": ["kubelet.md"], "query_class": "paraphrase"}
+{"query_id": "p04", "query": "docker cache reuse speedup", "expected": ["images.md"], "query_class": "paraphrase"}
+{"query_id": "p05", "query": "making bread rise slowly", "expected": ["sourdough.md"], "query_class": "paraphrase"}
+{"query_id": "p06", "query": "stargazing equipment setup", "expected": ["telescope.md"], "query_class": "paraphrase"}
+{"query_id": "p07", "query": "employee salary processing", "expected": ["payroll.md"], "query_class": "paraphrase"}
+{"query_id": "p08", "query": "global warming shrinking glaciers", "expected": ["glacier.md"], "query_class": "paraphrase"}
+{"query_id": "p09", "query": "preparing to jog twenty six miles", "expected": ["marathon.md"], "query_class": "paraphrase"}
+{"query_id": "p10", "query": "encrypting secret messages", "expected": ["cipher.md"], "query_class": "paraphrase"}
+{"query_id": "p11", "query": "vehicle dynamics on twisty routes", "expected": ["sedan.md"], "query_class": "paraphrase"}
+{"query_id": "p12", "query": "proofing a loaf with wild yeast", "expected": ["sourdough.md"], "query_class": "paraphrase"}
+{"query_id": "x01", "query": "kubelet liveness probes", "expected": ["kubelet.md"], "query_class": "exact_term"}
+{"query_id": "x02", "query": "container images registry", "expected": ["images.md"], "query_class": "exact_term"}
+{"query_id": "x03", "query": "tamp the puck", "expected": ["espresso.md"], "query_class": "exact_term"}
+{"query_id": "x04", "query": "starter ferment stone", "expected": ["sourdough.md"], "query_class": "exact_term"}
+{"query_id": "x05", "query": "meltwater terminus channels", "expected": ["glacier.md"], "query_class": "exact_term"}
+{"query_id": "x06", "query": "tempo sessions tapering", "expected": ["marathon.md"], "query_class": "exact_term"}
+{"query_id": "x07", "query": "symmetric cipher plaintext key", "expected": ["cipher.md"], "query_class": "exact_term"}
+{"query_id": "x08", "query": "pole star nebulae mount", "expected": ["telescope.md"], "query_class": "exact_term"}
