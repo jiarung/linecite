@@ -215,11 +215,17 @@ producer 端：`snapshot_seq` per stream 持久化;僅當 `content_digest`
   MUST reject（可測錯誤條件）;僅 `import_snapshot` 通過管線
   1–6 後的內部交易情境可寫遠端分區。`register_host(...,
   allow_direct_writes=True)` 為測試/模擬逃生口,跳過重放防護。
+  **豁免**:僅更新**本地儲存 metadata**（`embedding`、
+  `embedded_at`、`embedding_model` — 皆非契約欄位,不參與重放/
+  身分判定）的顯式操作（如 reembed）不受此禁令約束,MAY 施於
+  任何分區;此類操作 MUST NOT 改動任何契約欄位或 manifests 狀態。
 
 ## 10. v0 明文排除
 
-跨機 `embedding` 搬運、轉發（re-export 遠端分區）、線上服務/
-discovery/auth、per-chunk 驗證時間戳、即時同步/自動衝突解決。
+跨機 `embedding` 搬運（`embedded_at`、`embedding_model` 同屬本地
+儲存 metadata,一律不出線,import 端為 NULL/合成 — 見 §9 豁免）、
+轉發（re-export 遠端分區）、線上服務/discovery/auth、per-chunk
+驗證時間戳、即時同步/自動衝突解決。
 
 ## 11. 凍結程序（Phase K）
 

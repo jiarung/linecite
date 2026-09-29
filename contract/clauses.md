@@ -58,3 +58,8 @@ enumeration; the prose spec governs on any wording conflict.
 14. Direct writes to a registered remote host MUST be rejected
     outside the import transaction context (allow_direct_writes is a
     test/simulation escape hatch that bypasses replay protection).
+    Exemption: explicit operations that update ONLY local storage
+    metadata (embedding, embedded_at, embedding_model — none of which
+    are contract fields or participate in replay/identity) MAY touch
+    any partition, and MUST NOT alter contract fields or manifests
+    state.

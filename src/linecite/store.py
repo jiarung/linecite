@@ -33,6 +33,12 @@ class Chunk:
     end_line: int
     embedded_at: datetime
     embedding: Optional[list[float]] = field(default=None, repr=False)
+    # Which model produced `embedding` (e.g. "text-embedding-3-small",
+    # "model2vec/potion-base-8M"). Write-boundary invariant for NEW
+    # writes: embedding IS NOT NULL <=> embedding_model IS NOT NULL.
+    # Pre-provenance rows (vector with NULL model) are quarantined
+    # legacy: excluded from model-scoped vector queries until reembed.
+    embedding_model: Optional[str] = None
     # Metadata columns All nullable
     # for backwards compat with legacy rows and to avoid blocking ingest
     # when a field cannot be inferred.
@@ -149,9 +155,13 @@ class ChunkStore:
     ]
 
     # Content columns (non-filterable). raw_text is the verbatim
-    # citation slice; nullable for legacy rows.
+    # citation slice; nullable for legacy rows. embedding_model is
+    # vector provenance (local storage metadata — never exported in
+    # snapshots); model scoping goes through the dedicated
+    # query_topk(embedding_model=...) parameter, NOT user filters.
     _CONTENT_COLUMNS: list[tuple[str, str]] = [
         ("raw_text", "TEXT"),
+        ("embedding_model", "TEXT"),
     ]
 
     # Provenance columns (idempotent ALTER, same backfill loop as metadata).
@@ -183,7 +193,13 @@ class ChunkStore:
         if not table_exists:
             self._create_chunks_v2()
             self._set_schema_version(SCHEMA_VERSION)
+            # Fresh store: the constructor dim becomes the persisted
+            # store dim (plan E0.6).
+            self._con.execute(
+                "INSERT INTO chunks_meta VALUES ('store_dim', ?) "
+                "ON CONFLICT DO NOTHING", [self.dim])
         else:
+            self._check_store_dim()
             # Pre-v2 DBs: relax legacy embedding NOT NULL (idempotent) and
             # backfill any missing columns before the v2 key migration.
             try:
@@ -277,7 +293,7 @@ class ChunkStore:
                 embedding     FLOAT[{self.dim}],
                 artifact_type TEXT, heading_path TEXT,
                 language TEXT, quality_tag TEXT,
-                raw_text TEXT,
+                raw_text TEXT, embedding_model TEXT,
                 host TEXT, origin_repo TEXT, content_sha TEXT,
                 chunk_ordinal INTEGER
             )
@@ -285,6 +301,39 @@ class ChunkStore:
         for col, sqltype in self._ext_columns:
             self._con.execute(
                 f"ALTER TABLE chunks ADD COLUMN {col} {sqltype}")
+
+    def _check_store_dim(self) -> None:
+        """Persisted-dim guard (plan E0.6): opening an existing DB with
+        the wrong constructor dim must fail HERE with a clear message,
+        not later at cast/write time. Pre-E0 DBs carry no record — the
+        dim is inferred from the physical embedding column type
+        (FLOAT[N]) and persisted before comparison."""
+        row = self._con.execute(
+            "SELECT value FROM chunks_meta WHERE key = 'store_dim'"
+        ).fetchone()
+        if row is None:
+            col = self._con.execute(
+                "SELECT data_type FROM information_schema.columns "
+                "WHERE table_name = 'chunks' AND column_name = "
+                "'embedding'").fetchone()
+            m = _re.search(r"\[(\d+)\]", col[0]) if col else None
+            if m is None:      # no inferable dim — trust constructor
+                self._con.execute(
+                    "INSERT INTO chunks_meta VALUES ('store_dim', ?) "
+                    "ON CONFLICT DO NOTHING", [self.dim])
+                return
+            inferred = int(m.group(1))
+            self._con.execute(
+                "INSERT INTO chunks_meta VALUES ('store_dim', ?) "
+                "ON CONFLICT DO NOTHING", [inferred])
+            stored = inferred
+        else:
+            stored = int(row[0])
+        if stored != self.dim:
+            raise ValueError(
+                f"store dim mismatch: DB persists dim={stored}, "
+                f"constructor got dim={self.dim} — open this store with "
+                f"dim={stored} (embedding dims cannot mix in one store)")
 
     def _schema_version(self) -> int:
         row = self._con.execute(
@@ -551,12 +600,12 @@ class ChunkStore:
                 "start_line", "end_line", "embedded_at", "embedding",
                 "artifact_type", "heading_path", "language", "quality_tag",
                 "host", "origin_repo", "content_sha", "chunk_ordinal",
-                "chunk_uid", "raw_text"]
+                "chunk_uid", "raw_text", "embedding_model"]
         vals = [c.chunk_id, c.source_path, c.source_type, c.text,
                 c.start_line, c.end_line, c.embedded_at, c.embedding,
                 c.artifact_type, c.heading_path, c.language, c.quality_tag,
                 c.host, c.origin_repo, c.content_sha, c.chunk_ordinal,
-                c.chunk_uid, c.raw_text]
+                c.chunk_uid, c.raw_text, c.embedding_model]
         ext = c.ext or {}
         for name, _ in self._ext_columns:
             cols.append(name)
@@ -654,6 +703,11 @@ class ChunkStore:
             # Line contract applies to matched updates too (plan C1):
             # upsert previously revalidated lines only on the insert path.
             self._check_lines(c)
+            # Pairing invariant applies to matched backfill too (E0):
+            # the single enforcement point runs for EVERY incoming chunk,
+            # not only inserts — otherwise backfill could write a vector
+            # with NULL model.
+            self._check_embedding(c)
             incoming_uids.add(uid)
             ext_names = [n for n, _ in self._ext_columns]
             ext_select = "".join(f", {n}" for n in ext_names)
@@ -664,8 +718,6 @@ class ChunkStore:
                 f"FROM chunks WHERE chunk_uid = ?", [uid]
             ).fetchone()
             if row is None:
-                self._check_embedding(c)
-                self._check_lines(c)
                 self._insert_chunk_row(c)
                 res.inserted += 1
             else:
@@ -702,8 +754,12 @@ class ChunkStore:
                            or backfill_vec)
                 if changed:
                     ext_set = "".join(f", {n}=?" for n in ext_names)
-                    vec_set = ", embedding=?, embedded_at=?" if backfill_vec else ""
-                    vec_vals = ([c.embedding, c.embedded_at]
+                    # Provenance rides the vector: backfill writes model
+                    # together with the embedding (pairing invariant).
+                    vec_set = (", embedding=?, embedded_at=?, "
+                               "embedding_model=?" if backfill_vec else "")
+                    vec_vals = ([c.embedding, c.embedded_at,
+                                 c.embedding_model]
                                 if backfill_vec else [])
                     self._con.execute(
                         f"UPDATE chunks SET start_line=?, end_line=?, "
@@ -790,21 +846,85 @@ class ChunkStore:
 
     def _check_embedding(self, c: Chunk) -> None:
         """Embedding is optional (lexical mode) unless require_embedding;
-        when present it must match the store dimension."""
+        when present it must match the store dimension. Single
+        write-boundary enforcement point for the provenance pairing
+        invariant (NEW writes): embedding <=> embedding_model."""
         if c.embedding is None:
+            if c.embedding_model is not None:
+                raise ValueError(
+                    "embedding_model without embedding: provenance rides "
+                    "the vector (pairing invariant)")
             if self.require_embedding:
                 raise ValueError(
                     f"store requires embedding of length {self.dim} "
                     f"(require_embedding=True)")
             return
+        if c.embedding_model is None:
+            raise ValueError(
+                "embedding without embedding_model: new vectors must "
+                "carry provenance (pairing invariant; legacy NULL-model "
+                "rows are read-side quarantine only)")
         if len(c.embedding) != self.dim:
             raise ValueError(f"embedding must be length {self.dim}")
 
     def count(self) -> int:
         return self._con.execute("SELECT COUNT(*) FROM chunks").fetchone()[0]
 
+    def reembed(self, embedder, *, filters: Optional[dict] = None,
+                batch_size: int = 64) -> int:
+        """Re-embed chunks in scope with `embedder` — the ONE sanctioned
+        path that may overwrite stored vectors ("never SILENTLY
+        re-embedded": explicit migration is allowed, silent overwrite is
+        not). Covers model switches, legacy NULL-model reclaim, and
+        first-time embedding of lexical rows.
+
+        Contract §9 exemption: updates ONLY local storage metadata
+        (embedding / embedded_at / embedding_model), so it MAY run over
+        imported remote partitions and MUST NOT touch contract fields
+        or manifests state (regression-tested).
+
+        embedder: Embedder protocol — .embed(texts), .model, .dim.
+        filters: same columns as query_topk filters (host, origin_repo,
+        source_path, metadata, registered ext columns).
+        Returns the number of rows re-embedded.
+        """
+        if embedder.dim != self.dim:
+            raise ValueError(
+                f"embedder dim {embedder.dim} != store dim {self.dim}")
+        model = getattr(embedder, "model", None)
+        if not isinstance(model, str) or not model:
+            raise ValueError(
+                "embedder.model must be a non-empty string — reembed "
+                "writes ride the pairing invariant too")
+        filter_sql, params = self._build_filter_sql(filters)
+        where = f"WHERE {filter_sql}" if filter_sql else ""
+        rows = self._con.execute(
+            f"SELECT chunk_uid, text FROM chunks {where} "
+            "ORDER BY chunk_uid", params).fetchall()
+        n = 0
+        now = datetime.now()
+        for i in range(0, len(rows), batch_size):
+            batch = rows[i:i + batch_size]
+            vectors = embedder.embed([t for _, t in batch])
+            if len(vectors) != len(batch):
+                raise ValueError(
+                    f"embedder returned {len(vectors)} vectors for "
+                    f"{len(batch)} texts")
+            for (uid, _), vec in zip(batch, vectors):
+                if len(vec) != self.dim:
+                    raise ValueError(
+                        f"embedding must be length {self.dim}")
+                self._con.execute(
+                    "UPDATE chunks SET embedding=?, embedded_at=?, "
+                    "embedding_model=? WHERE chunk_uid=?",
+                    [vec, now, model, uid])
+                n += 1
+        return n
+
     def query_topk(self, vector: list[float], k: int = 5,
-                   filters: Optional[dict] = None
+                   filters: Optional[dict] = None, *,
+                   embedding_model: Optional[str] = None,
+                   allow_mixed_embedding_models: bool = False
                    ) -> list[tuple[Chunk, float]]:
         """Return k nearest chunks by cosine distance, with optional metadata filters.
 
@@ -821,11 +941,25 @@ class ChunkStore:
         """
         if len(vector) != self.dim:
             raise ValueError(f"query vector must be length {self.dim}")
+        # Model-space isolation (hard rule): cosine across different
+        # embedding models is meaningless, so the caller must either
+        # name the model space or explicitly opt into mixing. NULL-model
+        # legacy vectors are excluded from model-scoped queries.
+        if embedding_model is None and not allow_mixed_embedding_models:
+            raise ValueError(
+                "query_topk requires embedding_model= (the model the "
+                "query vector came from), or "
+                "allow_mixed_embedding_models=True to opt into "
+                "cross-model comparison")
         filter_sql, params = self._build_filter_sql(filters)
         # Nullable embeddings (lexical rows) must not reach the scorer:
         # array_cosine_similarity(NULL, v) is NULL and would crash result
         # materialization. Vector search only sees embedded rows.
         vec_guard = "embedding IS NOT NULL"
+        model_params: list = []
+        if embedding_model is not None:
+            vec_guard += " AND embedding_model = ?"
+            model_params = [embedding_model]
         where_sql = (f"WHERE {vec_guard} AND ({filter_sql})"
                      if filter_sql else f"WHERE {vec_guard}")
         # Parameter order must match ? positions left-to-right in the SQL:
@@ -842,7 +976,7 @@ class ChunkStore:
             {where_sql}
             ORDER BY score DESC, chunk_uid ASC
             LIMIT ?
-        """, [vector, *params, k]).fetchall()
+        """, [vector, *model_params, *params, k]).fetchall()
         return [self._row_to_scored_chunk(r, ext_names) for r in rows]
 
     # Column order shared by every retrieval SELECT; _row_to_scored_chunk
@@ -852,7 +986,7 @@ class ChunkStore:
         "start_line", "end_line", "embedded_at", "embedding",
         "artifact_type", "heading_path", "language", "quality_tag",
         "host", "origin_repo", "content_sha", "chunk_ordinal", "chunk_uid",
-        "raw_text")
+        "raw_text", "embedding_model")
 
     def _row_to_scored_chunk(self, r, ext_names: list[str]
                              ) -> tuple[Chunk, float]:
@@ -868,6 +1002,7 @@ class ChunkStore:
             language=r[10], quality_tag=r[11],
             host=r[12], origin_repo=r[13], content_sha=r[14],
             chunk_ordinal=r[15], chunk_uid=r[16], raw_text=r[17],
+            embedding_model=r[18],
             ext=ext,
         )
         return (c, float(r[n_base + len(ext_names)]))

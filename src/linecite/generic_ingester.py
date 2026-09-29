@@ -40,7 +40,9 @@ def ingest_paths(store: ChunkStore, repo_root: Path | str, *,
                  host: str, origin_repo: str,
                  globs: Iterable[str] = DEFAULT_GLOBS,
                  source_type: str = "doc",
+                 embedder=None,
                  embed_fn: Optional[Callable[[list[str]], list[list[float]]]] = None,
+                 embedding_model: Optional[str] = None,
                  scope: str = "full",
                  ) -> SnapshotResult:
     """Walk `repo_root` for files matching `globs`, chunk, and reconcile
@@ -58,13 +60,27 @@ def ingest_paths(store: ChunkStore, repo_root: Path | str, *,
     unsealed scan so a transient error can never mass-delete
     (see the sealed-scan safety tests).
 
-    embed_fn: optional batch embedder `texts -> vectors`, applied only to
-    chunks whose chunk_uid is not already stored (matched chunks keep
-    their stored vectors — no re-embed cost). None (default) writes
-    embedding-less chunks for the lexical path.
+    Embedding (preferred): pass `embedder` — an object with
+    `.embed(texts) -> vectors`, `.model: str`, `.dim: int` (the Embedder
+    protocol). Legacy: `embed_fn` (bare callable) is still accepted but
+    MUST be paired with `embedding_model=` — vectors without provenance
+    are rejected at the write boundary. None (default) writes
+    embedding-less chunks for the lexical path. Vectors are applied only
+    to chunks not already embedded; stored vectors are never silently
+    re-embedded (explicit migration: ChunkStore.reembed).
     """
     if scope not in ("full", "files"):
         raise ValueError(f"scope must be 'full' or 'files', got {scope!r}")
+    if embedder is not None:
+        if embed_fn is not None:
+            raise ValueError("pass embedder= or embed_fn=, not both")
+        embed_fn = embedder.embed
+        embedding_model = embedder.model
+    elif embed_fn is not None and embedding_model is None:
+        raise ValueError(
+            "embed_fn requires embedding_model= (provenance pairing "
+            "invariant): a bare callable carries no model identity — "
+            "or pass an embedder object instead")
     root = Path(repo_root).resolve()
     globs = _validate_globs(globs)
     candidates = sorted({p for g in globs for p in root.glob(g)
@@ -109,8 +125,12 @@ def ingest_paths(store: ChunkStore, repo_root: Path | str, *,
             ))
     if embed_fn is not None and chunks:
         import dataclasses
-        # Embed chunks that are new OR stored without a vector (lexical
-        # rows get backfilled; stored vectors are never re-embedded).
+        # Model-aware embed skip (plan E0.4): any stored vector — same
+        # model (reusable), different model (untouched pending explicit
+        # reembed), or NULL-model legacy (quarantined) — is left alone;
+        # only vectorless chunks get embedded. Wrong-model rows are kept
+        # out of results by query-side model isolation, never by silent
+        # re-embedding here.
         embedded_uids: set = set()
         if scanned_rel:
             ph = ",".join("?" * len(scanned_rel))
@@ -129,12 +149,45 @@ def ingest_paths(store: ChunkStore, repo_root: Path | str, *,
                     f"embed_fn returned {len(vectors)} vectors for "
                     f"{len(new_idx)} texts")
             for i, v in zip(new_idx, vectors):
-                chunks[i] = dataclasses.replace(chunks[i], embedding=v)
+                chunks[i] = dataclasses.replace(
+                    chunks[i], embedding=v,
+                    embedding_model=embedding_model)
     sealed = unreadable == 0
     return store.upsert_snapshot(
         chunks, host=host, origin_repo=origin_repo,
         scanned_paths=(None if scope == "full" else scanned_rel),
         sealed=sealed)
+
+
+def _resolve_dim(db_path: str, cli_dim: Optional[int]) -> int:
+    """CLI dim resolution (plan E0.6): an existing DB's persisted dim
+    wins when --dim is omitted; --dim given still goes through the
+    store's open-time mismatch check. New stores default to 1536."""
+    if cli_dim is not None:
+        return cli_dim
+    if db_path != ":memory:" and Path(db_path).exists():
+        import duckdb
+        con = duckdb.connect(db_path, read_only=True)
+        try:
+            row = con.execute(
+                "SELECT value FROM chunks_meta WHERE key = 'store_dim'"
+            ).fetchone()
+            if row:
+                return int(row[0])
+            col = con.execute(
+                "SELECT data_type FROM information_schema.columns "
+                "WHERE table_name = 'chunks' AND column_name = "
+                "'embedding'").fetchone()
+            if col:
+                import re
+                m = re.search(r"\[(\d+)\]", col[0])
+                if m:
+                    return int(m.group(1))
+        except duckdb.Error:
+            pass
+        finally:
+            con.close()
+    return 1536
 
 
 def main(argv: Optional[list[str]] = None) -> int:
@@ -150,7 +203,11 @@ def main(argv: Optional[list[str]] = None) -> int:
     ap.add_argument("--host", default="local")
     ap.add_argument("--origin-repo", default=None,
                     help="default: basename of root")
-    ap.add_argument("--dim", type=int, default=1536)
+    ap.add_argument("--dim", type=int, default=None,
+                    help="embedding dimension. Default: the store's "
+                         "persisted dim for an existing DB (inferred "
+                         "from the embedding column on pre-E0 DBs); "
+                         "1536 for a new store.")
     ap.add_argument("--scope", choices=["full", "files"], default=None,
                     help="delete-reconciliation scope. Default: 'full' "
                          "when using the default globs (the root owns its "
@@ -165,7 +222,7 @@ def main(argv: Optional[list[str]] = None) -> int:
         ap.error(f"not a directory: {root}")
     origin = args.origin_repo or root.resolve().name
     scope = args.scope or ("files" if args.glob else "full")
-    store = ChunkStore(args.db, dim=args.dim)
+    store = ChunkStore(args.db, dim=_resolve_dim(args.db, args.dim))
     try:
         stats = ingest_paths(
             store, root, host=args.host, origin_repo=origin,

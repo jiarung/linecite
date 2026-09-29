@@ -22,7 +22,7 @@ from tests.conftest import det_vec
 
 
 def _mk(text: str, *, path: str = "docs/a.md", ordinal: int = 0,
-        embedding=None, start: int = 1, end: int = 2) -> Chunk:
+        embedding=None, model=None, start: int = 1, end: int = 2) -> Chunk:
     from linecite.identity import chunk_id as _chunk_id, chunk_uid as _chunk_uid, content_sha as _content_sha
     csha = _content_sha(text)
     return Chunk(
@@ -34,6 +34,7 @@ def _mk(text: str, *, path: str = "docs/a.md", ordinal: int = 0,
         end_line=end,
         embedded_at=datetime(2026, 9, 24),
         embedding=embedding,
+        embedding_model=model,
         host="h1",
         origin_repo="r1",
         content_sha=csha,
@@ -118,9 +119,11 @@ class TestMixedStore:
         # Regression: NULL-embedding rows must not
         # reach the vector scorer even when k exceeds embedded rows.
         s = ChunkStore(dim=4)
-        s.write_chunk(_mk("embedded row", embedding=det_vec("embedded", 4)))
+        s.write_chunk(_mk("embedded row", embedding=det_vec("embedded", 4),
+                          model="det-test"))
         s.write_chunk(_mk("lexical only row", path="d/lex.md", ordinal=1))
-        hits = s.query_topk(det_vec("embedded", 4), k=5)
+        hits = s.query_topk(det_vec("embedded", 4), k=5,
+                            embedding_model="det-test")
         assert len(hits) == 1
         assert hits[0][0].embedding is not None
 
@@ -183,6 +186,6 @@ class TestRequireEmbedding:
 
     def test_strict_store_accepts_embedded_chunk(self):
         s = ChunkStore(dim=4, require_embedding=True)
-        assert s.write_chunk(_mk("ok", embedding=det_vec("ok", 4))) is True
+        assert s.write_chunk(_mk("ok", embedding=det_vec("ok", 4), model="det-test")) is True
 
 

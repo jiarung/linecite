@@ -93,7 +93,11 @@ class Retriever:
             hits = self.store.query_fts(query, k=k, filters=filters)
         else:
             [qvec] = self.embedder.embed([query])
-            hits = self.store.query_topk(qvec, k=k, filters=filters)
+            # Model-space isolation: only compare against vectors the
+            # same model produced (store-level hard rule).
+            hits = self.store.query_topk(
+                qvec, k=k, filters=filters,
+                embedding_model=self.embedder.model)
         elapsed_ms = (time.monotonic() - t0) * 1000
 
         chunks = [c for c, _ in hits]

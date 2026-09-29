@@ -118,9 +118,10 @@ identity.py docstring 明言為 cross-host shared index 設計）已存在但
      raw_text、content_sha、chunk_ordinal，以及**可空 metadata 欄**
      heading_path、artifact_type、language、quality_tag（store 既有
      且可作 filter 的欄位 — 不入契約會被 matched import 靜默抹掉）。
-     **排除**：embedding / embedded_at（「stored vectors are never
-     silently re-embedded」的對偶：也不 silently 跨機搬運 — v0 收方
-     自建索引）、extension columns（宿主自定義,不進契約 v0）
+     **排除**：embedding / embedded_at / embedding_model（「stored
+     vectors are never silently re-embedded」的對偶：也不 silently
+     跨機搬運 — v0 收方自建索引;三者皆本地儲存 metadata）、
+     extension columns（宿主自定義,不進契約 v0）
    - `manifest.json` 必填欄位：host id、`host_identity_fingerprint`
      （來自 C0.4 的本機身分）、`content_digest`、`snapshot_seq`、
      `manifest_digest`、origin_repo、format_version、chunk 數、

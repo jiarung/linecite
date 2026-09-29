@@ -34,6 +34,7 @@ def _mk_chunk(text: str, *, source_type: str = "note", ext: dict | None = None,
         end_line=2,
         embedded_at=datetime(2026, 9, 24),
         embedding=det_vec(text, dim),
+        embedding_model="det-test",
         host="h1",
         origin_repo="r1",
         content_sha=csha,
@@ -55,14 +56,14 @@ class TestGenericCore:
         s = ChunkStore(dim=4)
         c = _mk_chunk("hello world", source_type="recipe_doc")
         assert s.write_chunk(c) is True
-        got, _ = s.query_topk(det_vec("hello world", 4), k=1)[0]
+        got, _ = s.query_topk(det_vec("hello world", 4), k=1, embedding_model="det-test")[0]
         assert got.source_type == "recipe_doc"
 
     def test_unregistered_ext_filter_rejected(self):
         s = ChunkStore(dim=4)
         s.write_chunk(_mk_chunk("x"))
         with pytest.raises(ValueError):
-            s.query_topk(det_vec("x", 4), k=1, filters={"project_id": "X"})
+            s.query_topk(det_vec("x", 4), k=1, filters={"project_id": "X"}, embedding_model="det-test")
 
     def test_registered_extension_roundtrip_and_filter(self):
         s = ChunkStore(dim=4, extension_columns=[
@@ -73,7 +74,7 @@ class TestGenericCore:
                       ordinal=1, path="docs/b.md")
         assert s.write_chunk(a) and s.write_chunk(b)
         hits = s.query_topk(det_vec("alpha text", 4), k=10,
-                            filters={"project_id": "sA"})
+                            filters={"project_id": "sA"}, embedding_model="det-test")
         assert len(hits) == 1
         got = hits[0][0]
         assert got.ext == {"project_id": "sA", "outcome": "fail"}
@@ -81,7 +82,7 @@ class TestGenericCore:
     def test_extension_absent_reads_as_none_values(self):
         s = ChunkStore(dim=4, extension_columns=[("project_id", "TEXT")])
         s.write_chunk(_mk_chunk("no ext set"))
-        got, _ = s.query_topk(det_vec("no ext set", 4), k=1)[0]
+        got, _ = s.query_topk(det_vec("no ext set", 4), k=1, embedding_model="det-test")[0]
         assert got.ext in (None, {}, {"project_id": None})
 
     def test_ext_ignored_when_not_registered(self):
@@ -89,7 +90,7 @@ class TestGenericCore:
         # as filterable state, and does not crash the insert.
         s = ChunkStore(dim=4)
         s.write_chunk(_mk_chunk("stray ext", ext={"project_id": "sX"}))
-        got, _ = s.query_topk(det_vec("stray ext", 4), k=1)[0]
+        got, _ = s.query_topk(det_vec("stray ext", 4), k=1, embedding_model="det-test")[0]
         assert not (got.ext or {}).get("project_id")
 
 
@@ -128,7 +129,7 @@ class TestUpsertExtension:
         res = s.upsert_snapshot([a2], host="h1", origin_repo="r1",
                                 sealed=False)
         assert res.updated == 1 and res.inserted == 0
-        got, _ = s.query_topk(det_vec("stable text", 4), k=1)[0]
+        got, _ = s.query_topk(det_vec("stable text", 4), k=1, embedding_model="det-test")[0]
         assert got.ext == {"project_id": "s1"}
 
     def test_matched_upsert_same_ext_is_unchanged(self):

@@ -157,11 +157,11 @@ class TestSafetyAndScope:
         _toy_repo(tmp_path)
         s = ChunkStore(dim=4)
         ingest_paths(s, tmp_path, host="h1", origin_repo="toy",
-                     embed_fn=fake_embed)
+                     embed_fn=fake_embed, embedding_model="fake/t")
         first_calls = sum(calls)
         assert first_calls > 0
         ingest_paths(s, tmp_path, host="h1", origin_repo="toy",
-                     embed_fn=fake_embed)
+                     embed_fn=fake_embed, embedding_model="fake/t")
         assert sum(calls) == first_calls  # unchanged corpus → zero embeds
 
     def test_lexical_rows_backfilled_when_embed_fn_added(self, tmp_path):
@@ -179,7 +179,7 @@ class TestSafetyAndScope:
         ingest_paths(s, tmp_path, host="h1", origin_repo="toy")  # lexical
         n = s.count()
         stats = ingest_paths(s, tmp_path, host="h1", origin_repo="toy",
-                             embed_fn=fake_embed)
+                             embed_fn=fake_embed, embedding_model="fake/t")
         assert sum(calls) == n            # every lexical row embedded once
         assert stats.updated == n         # backfill counted as update
         emb = s._con.execute(
@@ -188,7 +188,7 @@ class TestSafetyAndScope:
         assert emb == n
         # third pass: nothing left to embed
         ingest_paths(s, tmp_path, host="h1", origin_repo="toy",
-                     embed_fn=fake_embed)
+                     embed_fn=fake_embed, embedding_model="fake/t")
         assert sum(calls) == n
 
     def test_cli_custom_glob_defaults_to_files_scope(self, tmp_path):
